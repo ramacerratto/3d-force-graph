@@ -18,10 +18,35 @@ type Coords = { x: number; y: number; z: number; };
 // don't surface these internal props from inner ThreeForceGraph
 type ExcludedInnerProps = 'onLoading' | 'onFinishLoading' | 'onUpdate' | 'onFinishUpdate' | 'tickFrame' | 'd3AlphaTarget' | 'resetCountdown';
 
+interface GraphData<N extends NodeObject = NodeObject, L extends LinkObject<N> = LinkObject<N>> {
+  nodes: N[];
+  links: L[];
+}
+
+interface ApiLoaderResult<N extends NodeObject = NodeObject, L extends LinkObject<N> = LinkObject<N>> {
+  nodes: N[];
+  links: L[];
+}
+
 interface ForceGraph3DGenericInstance<ChainableInstance, N extends NodeObject = NodeObject, L extends LinkObject<N> = LinkObject<N>>
   extends Omit<ThreeForceGraphGeneric<ChainableInstance, N, L>, ExcludedInnerProps> {
 
   _destructor(): void;
+
+  // API loader configuration
+  apiBaseUrl(): string;
+  apiBaseUrl(url: string): ChainableInstance;
+  apiInitEndpoint(): string;
+  apiInitEndpoint(endpoint: string): ChainableInstance;
+  apiLoadNodesEndpoint(): string;
+  apiLoadNodesEndpoint(endpoint: string): ChainableInstance;
+  apiFetchOptions(): RequestInit;
+  apiFetchOptions(options: RequestInit): ChainableInstance;
+  onApiError(callback: (error: Error, methodName: string) => void): ChainableInstance;
+
+  // API loader methods
+  initGraphFromApi(dimensionId?: string | number): Promise<GraphData<N, L>>;
+  loadNextNodes(nodeIds: Array<string | number>): Promise<ApiLoaderResult<N, L>>;
 
   // Container layout
   width(): number;

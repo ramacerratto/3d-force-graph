@@ -98,6 +98,65 @@ new ForceGraph3d(<domElement>, { configOptions })
 | <b>linkSource</b>([<i>str</i>]) | Link object accessor attribute referring to id of source node. | `source` |
 | <b>linkTarget</b>([<i>str</i>]) | Link object accessor attribute referring to id of target node. | `target` |
 
+### API Loader
+
+Methods for loading graph data from REST APIs. This feature enables initializing the graph from an API endpoint and dynamically loading additional nodes on demand.
+
+| Method | Description | Default |
+| --- | --- | :--: |
+| <b>apiBaseUrl</b>([<i>str</i>]) | Getter/setter for the base URL for API requests. If empty, uses the current page's origin. | `''` |
+| <b>apiInitEndpoint</b>([<i>str</i>]) | Getter/setter for the endpoint path used by `initGraphFromApi()`. | `/graph-data` |
+| <b>apiLoadNodesEndpoint</b>([<i>str</i>]) | Getter/setter for the endpoint path used by `loadNextNodes()`. | `/graph-data/nodes` |
+| <b>apiFetchOptions</b>([<i>object</i>]) | Getter/setter for custom [fetch options](https://developer.mozilla.org/en-US/docs/Web/API/fetch#options) (e.g., headers, credentials) to include in API requests. | `{}` |
+| <b>onApiError</b>(<i>fn</i>) | Callback function invoked when an API request fails. Receives the error and method name as arguments: `onApiError(error, methodName)`. | - |
+| <b>initGraphFromApi</b>([<i>dimensionId</i>]) | Fetches initial graph data from the API. Makes a `GET` request to `{apiBaseUrl}{apiInitEndpoint}`. If `dimensionId` is provided, it's included as a query parameter. Returns a Promise that resolves with the loaded graph data `{ nodes, links }`. | |
+| <b>loadNextNodes</b>(<i>nodeIds</i>) | Loads additional nodes by their IDs. Makes a `POST` request to `{apiBaseUrl}{apiLoadNodesEndpoint}` with body `{ nodeIds: [...] }`. New nodes and links are automatically merged with the existing graph (duplicates are ignored). Returns a Promise that resolves with `{ nodes, links }` containing only the newly added items. | |
+
+#### API Loader Example
+
+```js
+const Graph = new ForceGraph3D(document.getElementById('graph'))
+  // Configure API endpoints
+  .apiBaseUrl('https://api.example.com')
+  .apiInitEndpoint('/graph-data')           // GET endpoint for initial data
+  .apiLoadNodesEndpoint('/graph-data/nodes') // POST endpoint for loading more nodes
+  .apiFetchOptions({
+    credentials: 'include',
+    headers: { 'Authorization': 'Bearer your-token' }
+  })
+  .onApiError((error, method) => {
+    console.error(`API error in ${method}:`, error);
+  });
+
+// Initialize graph from API with optional dimensionId
+Graph.initGraphFromApi('my-dimension-123')
+  .then(data => console.log('Loaded', data.nodes.length, 'nodes'));
+
+// Load more nodes when clicking on a node (e.g., expand neighbors)
+Graph.onNodeClick(node => {
+  Graph.loadNextNodes([node.id])
+    .then(({ nodes, links }) => {
+      console.log('Added', nodes.length, 'new nodes');
+    });
+});
+```
+
+#### Expected API Response Format
+
+Both endpoints should return JSON in the standard graph data format:
+
+```json
+{
+  "nodes": [
+    { "id": "node1", "name": "Node 1", "val": 10 },
+    { "id": "node2", "name": "Node 2", "val": 20 }
+  ],
+  "links": [
+    { "source": "node1", "target": "node2" }
+  ]
+}
+```
+
 ### Container layout
 
 | Method | Description | Default |

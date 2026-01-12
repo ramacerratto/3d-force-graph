@@ -111,6 +111,13 @@ const linkedRenderObjsMethods = Object.assign(
 export default Kapsule({
 
   props: {
+    // API loader configuration
+    apiBaseUrl: { default: '', triggerUpdate: false },
+    apiInitEndpoint: { default: '/graph-data', triggerUpdate: false },
+    apiLoadNodesEndpoint: { default: '/graph-data/nodes', triggerUpdate: false },
+    apiFetchOptions: { default: {}, triggerUpdate: false },
+    onApiError: { default: () => {}, triggerUpdate: false },
+
     nodeLabel: { default: 'name', triggerUpdate: false },
     linkLabel: { default: 'name', triggerUpdate: false },
     linkHoverPrecision: { default: 1, onChange: (p, state) => state.renderObjs.lineHoverPrecision(p), triggerUpdate: false },
@@ -185,6 +192,111 @@ export default Kapsule({
       this.pauseAnimation();
       this.graphData({ nodes: [], links: []});
     },
+
+    // API loader methods
+    initGraphFromApi: function(state, dimensionId) {
+      const baseUrl = state.apiBaseUrl;
+      const endpoint = state.apiInitEndpoint;
+      const url = new URL(endpoint, baseUrl || window.location.origin);
+
+      if (dimensionId !== undefined) {
+        url.searchParams.set('dimensionId', dimensionId);
+      }
+
+      const fetchOptions = {
+        method: 'GET',
+        ...state.apiFetchOptions
+      };
+
+      return fetch(url.toString(), fetchOptions)
+        .then(response => {
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          return response.json();
+        })
+        .then(data => {
+          this.graphData(data);
+          return data;
+        })
+        .catch(error => {
+          state.onApiError(error, 'initGraphFromApi');
+          throw error;
+        });
+    },
+
+    loadNextNodes: function(state, nodeIds) {
+      if (!Array.isArray(nodeIds) || nodeIds.length === 0) {
+        return Promise.resolve({ nodes: [], links: [] });
+      }
+
+      const baseUrl = state.apiBaseUrl;
+      const endpoint = state.apiLoadNodesEndpoint;
+      const url = new URL(endpoint, baseUrl || window.location.origin);
+
+      const fetchOptions = {
+        ...state.apiFetchOptions,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(state.apiFetchOptions.headers || {})
+        },
+        body: JSON.stringify({ nodeIds })
+      };
+
+      return fetch(url.toString(), fetchOptions)
+        .then(response => {
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          return response.json();
+        })
+        .then(newData => {
+          // Merge new nodes and links with existing graph data
+          const currentData = this.graphData();
+          const nodeIdAccessor = state.nodeId || 'id';
+          const getNodeId = typeof nodeIdAccessor === 'function'
+            ? nodeIdAccessor
+            : node => node[nodeIdAccessor];
+
+          const existingNodeIds = new Set(currentData.nodes.map(getNodeId));
+          const newNodes = (newData.nodes || []).filter(node => !existingNodeIds.has(getNodeId(node)));
+
+          const linkSourceAccessor = state.linkSource || 'source';
+          const linkTargetAccessor = state.linkTarget || 'target';
+          const getLinkSource = typeof linkSourceAccessor === 'function'
+            ? linkSourceAccessor
+            : link => link[linkSourceAccessor];
+          const getLinkTarget = typeof linkTargetAccessor === 'function'
+            ? linkTargetAccessor
+            : link => link[linkTargetAccessor];
+
+          const existingLinks = new Set(currentData.links.map(link => {
+            const sourceId = typeof getLinkSource(link) === 'object' ? getNodeId(getLinkSource(link)) : getLinkSource(link);
+            const targetId = typeof getLinkTarget(link) === 'object' ? getNodeId(getLinkTarget(link)) : getLinkTarget(link);
+            return `${sourceId}->${targetId}`;
+          }));
+
+          const newLinks = (newData.links || []).filter(link => {
+            const sourceId = getLinkSource(link);
+            const targetId = getLinkTarget(link);
+            return !existingLinks.has(`${sourceId}->${targetId}`);
+          });
+
+          const mergedData = {
+            nodes: [...currentData.nodes, ...newNodes],
+            links: [...currentData.links, ...newLinks]
+          };
+
+          this.graphData(mergedData);
+          return { nodes: newNodes, links: newLinks };
+        })
+        .catch(error => {
+          state.onApiError(error, 'loadNextNodes');
+          throw error;
+        });
+    },
+
     ...linkedFGMethods,
     ...linkedRenderObjsMethods
   },
