@@ -100,6 +100,23 @@ interface ForceGraph3DGenericInstance<ChainableInstance, N extends NodeObject = 
   renderer(): WebGLRenderer;
   controls(): object;
 
+  // Camera orbit
+  cameraOrbit(): boolean;
+  cameraOrbit(enabled: boolean): ChainableInstance;
+  cameraOrbitSpeed(): number;
+  cameraOrbitSpeed(degreesPerSecond: number): ChainableInstance;
+  cameraOrbitDistance(): number | null;
+  cameraOrbitDistance(distance: number | null): ChainableInstance;
+  cameraOrbitTarget(): Coords;
+  cameraOrbitTarget(target: Partial<Coords>): ChainableInstance;
+  cameraOrbitAxis(): 'x' | 'y' | 'z';
+  cameraOrbitAxis(axis: 'x' | 'y' | 'z'): ChainableInstance;
+  cameraOrbitDirection(): 1 | -1;
+  cameraOrbitDirection(direction: 1 | -1): ChainableInstance;
+  startOrbit(): ChainableInstance;
+  stopOrbit(): ChainableInstance;
+  isOrbiting(): boolean;
+
   // Utility
   graph2ScreenCoords(x: number, y: number, z: number): Coords;
   screen2GraphCoords(screenX: number, screenY: number, distance: number): Coords;

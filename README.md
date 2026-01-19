@@ -228,6 +228,57 @@ Both endpoints should return JSON in the standard graph data format:
 | <b>controls</b>() | Access the internal ThreeJS controls object. ||
 | <b>refresh</b>() | Redraws all the nodes/links. |
 
+### Camera orbit
+
+Built-in support for automatic camera orbiting around the graph. The camera continuously rotates around a target point while always facing the graph center. User interactions (pan, zoom, rotate) are seamlessly integrated - the orbit adapts to the new camera position and continues smoothly.
+
+| Method | Description | Default |
+| --- | --- | :--: |
+| <b>cameraOrbit</b>([<i>boolean</i>]) | Getter/setter for whether the camera orbit animation is enabled. | `false` |
+| <b>cameraOrbitSpeed</b>([<i>num</i>]) | Getter/setter for the orbit rotation speed in degrees per second. | `1` |
+| <b>cameraOrbitDistance</b>([<i>num</i>]) | Getter/setter for the distance from the target point. Use `null` to auto-calculate from the current camera position. | `null` |
+| <b>cameraOrbitTarget</b>([<i>{x,y,z}</i>]) | Getter/setter for the point in 3D space that the camera orbits around and looks at. | `{ x: 0, y: 0, z: 0 }` |
+| <b>cameraOrbitAxis</b>([<i>str</i>]) | Getter/setter for the axis to rotate around. Choice between `x`, `y`, or `z`. | `y` |
+| <b>cameraOrbitDirection</b>([<i>num</i>]) | Getter/setter for the orbit direction. `1` for clockwise, `-1` for counter-clockwise. | `1` |
+| <b>startOrbit</b>() | Starts the camera orbit animation. Equivalent to `cameraOrbit(true)`. | |
+| <b>stopOrbit</b>() | Stops the camera orbit animation. Equivalent to `cameraOrbit(false)`. | |
+| <b>isOrbiting</b>() | Returns whether the camera is currently orbiting. | |
+
+#### Camera Orbit Example
+
+```js
+const Graph = new ForceGraph3D(document.getElementById('graph'))
+  .graphData(myData)
+  // Configure orbit parameters
+  .cameraOrbitSpeed(20)              // 20 degrees per second
+  .cameraOrbitDistance(1400)         // Fixed distance from center
+  .cameraOrbitTarget({ x: 0, y: 0, z: 0 })  // Orbit around origin
+  .cameraOrbitAxis('y')              // Horizontal orbit
+  .cameraOrbitDirection(1)           // Clockwise
+  // Start orbiting
+  .startOrbit();
+
+// Toggle orbit on button click
+document.getElementById('toggleBtn').addEventListener('click', () => {
+  if (Graph.isOrbiting()) {
+    Graph.stopOrbit();
+  } else {
+    Graph.startOrbit();
+  }
+});
+
+// Change speed dynamically
+Graph.cameraOrbitSpeed(45);  // Faster rotation
+
+// Change axis to create vertical orbit
+Graph.cameraOrbitAxis('x');
+
+// Reverse direction
+Graph.cameraOrbitDirection(-1);
+```
+
+**Note:** The camera orbit works seamlessly with navigation controls enabled. When the user interacts with the camera (pan, zoom, rotate), the orbit automatically adapts to the new camera position and distance, continuing to rotate around the same target point.
+
 ### Force engine configuration
 
 | Method | Description | Default |

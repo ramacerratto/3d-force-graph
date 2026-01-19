@@ -118,6 +118,17 @@ export default Kapsule({
     apiFetchOptions: { default: {}, triggerUpdate: false },
     onApiError: { default: () => {}, triggerUpdate: false },
 
+    // Camera orbit configuration
+    cameraOrbit: { default: false, triggerUpdate: false },
+    cameraOrbitSpeed: { default: 1, triggerUpdate: false }, // Degrees per second
+    cameraOrbitDistance: {
+      default: null, // null means auto-calculate from current camera distance
+      triggerUpdate: false
+    },
+    cameraOrbitTarget: { default: { x: 0, y: 0, z: 0 }, triggerUpdate: false }, // Point to orbit around
+    cameraOrbitAxis: { default: 'y', triggerUpdate: false }, // 'x', 'y', or 'z' - axis to orbit around
+    cameraOrbitDirection: { default: 1, triggerUpdate: false }, // 1 for clockwise, -1 for counter-clockwise
+
     nodeLabel: { default: 'name', triggerUpdate: false },
     linkLabel: { default: 'name', triggerUpdate: false },
     linkHoverPrecision: { default: 1, onChange: (p, state) => state.renderObjs.lineHoverPrecision(p), triggerUpdate: false },
@@ -172,11 +183,118 @@ export default Kapsule({
       }
       return this;
     },
+
+    // Camera orbit methods
+    startOrbit: function(state) {
+      if (!state.cameraOrbit) {
+        state.cameraOrbit = true;
+        state._orbitLastTime = null; // Reset timing for smooth start
+      }
+      return this;
+    },
+    stopOrbit: function(state) {
+      state.cameraOrbit = false;
+      return this;
+    },
+    isOrbiting: function(state) {
+      return state.cameraOrbit;
+    },
+
+    _updateCameraOrbit(state) {
+      if (!state.cameraOrbit) return;
+
+      const camera = state.renderObjs.camera();
+      const now = performance.now();
+      const target = state.cameraOrbitTarget || { x: 0, y: 0, z: 0 };
+      const axisName = state.cameraOrbitAxis || 'y';
+
+      // Create target vector
+      const targetVec = new three.Vector3(target.x, target.y, target.z);
+
+      // Calculate camera offset from target
+      const offsetVec = new three.Vector3().subVectors(camera.position, targetVec);
+
+      // Define rotation axis vector
+      const axisVec = new three.Vector3(
+        axisName === 'x' ? 1 : 0,
+        axisName === 'y' ? 1 : 0,
+        axisName === 'z' ? 1 : 0
+      );
+
+      // Initialize orbit state on first run
+      if (state._orbitLastTime === null || state._orbitLastTime === undefined) {
+        state._orbitLastTime = now;
+
+        // Store the current offset vector for orbit calculations
+        state._orbitOffset = offsetVec.clone();
+
+        // Calculate orbit distance if not specified (distance from target)
+        if (state.cameraOrbitDistance === null || state.cameraOrbitDistance === undefined) {
+          state._orbitDistance = offsetVec.length();
+        }
+
+        // Store last known camera position to detect user interaction
+        state._lastCameraPos = camera.position.clone();
+        return; // Skip first frame to ensure smooth start
+      }
+
+      // Detect if user moved the camera manually
+      const lastPos = state._lastCameraPos;
+      const cameraMoved = lastPos && camera.position.distanceTo(lastPos) > 0.01;
+
+      if (cameraMoved) {
+        // User moved the camera - update the offset vector from new position
+        state._orbitOffset = offsetVec.clone();
+
+        // Update orbit distance if not explicitly set
+        if (state.cameraOrbitDistance === null || state.cameraOrbitDistance === undefined) {
+          state._orbitDistance = offsetVec.length();
+        }
+      }
+
+      const deltaTime = (now - state._orbitLastTime) / 1000; // Convert to seconds
+      state._orbitLastTime = now;
+
+      // Calculate angular velocity (convert degrees/sec to radians/sec)
+      const speed = (state.cameraOrbitSpeed || 1) * (Math.PI / 180);
+      const direction = state.cameraOrbitDirection || 1;
+      const deltaAngle = speed * direction * deltaTime;
+
+      // Rotate the offset vector around the axis
+      state._orbitOffset.applyAxisAngle(axisVec, deltaAngle);
+
+      // Get orbit distance (use explicit distance if set, otherwise use calculated)
+      const distance = state.cameraOrbitDistance !== null && state.cameraOrbitDistance !== undefined
+        ? state.cameraOrbitDistance
+        : state._orbitDistance;
+
+      // Normalize and scale offset to maintain consistent distance
+      const newOffset = state._orbitOffset.clone().normalize().multiplyScalar(distance);
+
+      // Calculate new camera position
+      const newPos = new three.Vector3().addVectors(targetVec, newOffset);
+
+      // Update camera position
+      camera.position.copy(newPos);
+
+      // Always look at the target (keeps camera facing the graph)
+      camera.lookAt(targetVec);
+
+      // Update stored offset to match the scaled version
+      state._orbitOffset.copy(newOffset);
+
+      // Store current position for next frame comparison
+      state._lastCameraPos = camera.position.clone();
+    },
+
     _animationCycle(state) {
       if (state.enablePointerInteraction) {
         // reset canvas cursor (override dragControls cursor)
         this.renderer().domElement.style.cursor = null;
       }
+
+      // Update camera orbit
+      this._updateCameraOrbit();
 
       // Frame cycle
       state.forceGraph.tickFrame();

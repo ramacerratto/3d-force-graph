@@ -7,6 +7,35 @@
 
 <body>
   <div id="3d-graph"></div>
+  <div id="controls" style="position: absolute; top: 10px; left: 10px; background: rgba(255,255,255,0.9); padding: 15px; border-radius: 8px; font-family: sans-serif;">
+    <h3 style="margin-top: 0;">Camera Orbit Controls</h3>
+    <div style="margin-bottom: 10px;">
+      <button id="toggleOrbit">Start Orbit</button>
+    </div>
+    <div style="margin-bottom: 10px;">
+      <label>Speed (deg/s): <input type="range" id="speed" min="1" max="60" value="20"><span id="speedValue">20</span></label>
+    </div>
+    <div style="margin-bottom: 10px;">
+      <label>Distance: <input type="range" id="distance" min="500" max="3000" value="1400"><span id="distanceValue">1400</span></label>
+    </div>
+    <div style="margin-bottom: 10px;">
+      <label>Axis:
+        <select id="axis">
+          <option value="y" selected>Y (horizontal)</option>
+          <option value="x">X (vertical front-back)</option>
+          <option value="z">Z (vertical side-to-side)</option>
+        </select>
+      </label>
+    </div>
+    <div style="margin-bottom: 10px;">
+      <label>Direction:
+        <select id="direction">
+          <option value="1" selected>Clockwise</option>
+          <option value="-1">Counter-clockwise</option>
+        </select>
+      </label>
+    </div>
+  </div>
 
   <script>
     // Random tree
@@ -21,23 +50,47 @@
         }))
     };
 
-    const distance = 1400;
-
     const Graph = new ForceGraph3D(document.getElementById('3d-graph'))
         .enableNodeDrag(false)
-        .enableNavigationControls(false)
-        .showNavInfo(false)
-        .cameraPosition({ z: distance })
+        .enableNavigationControls(true) // Allow user to interact with camera while orbiting
+        .showNavInfo(true)
+        .cameraOrbitSpeed(20)
+        .cameraOrbitDistance(1400)
+        .cameraOrbitTarget({ x: 0, y: 0, z: 0 })
+        .cameraOrbitAxis('y')
+        .cameraOrbitDirection(1)
         .graphData(gData);
 
-    // camera orbit
-    let angle = 0;
-    setInterval(() => {
-      Graph.cameraPosition({
-        x: distance * Math.sin(angle),
-        z: distance * Math.cos(angle)
-      });
-      angle += Math.PI / 300;
-    }, 10);
+    // Control handlers
+    const toggleBtn = document.getElementById('toggleOrbit');
+    toggleBtn.addEventListener('click', () => {
+      if (Graph.isOrbiting()) {
+        Graph.stopOrbit();
+        toggleBtn.textContent = 'Start Orbit';
+      } else {
+        Graph.startOrbit();
+        toggleBtn.textContent = 'Stop Orbit';
+      }
+    });
+
+    document.getElementById('speed').addEventListener('input', (e) => {
+      const value = +e.target.value;
+      document.getElementById('speedValue').textContent = value;
+      Graph.cameraOrbitSpeed(value);
+    });
+
+    document.getElementById('distance').addEventListener('input', (e) => {
+      const value = +e.target.value;
+      document.getElementById('distanceValue').textContent = value;
+      Graph.cameraOrbitDistance(value);
+    });
+
+    document.getElementById('axis').addEventListener('change', (e) => {
+      Graph.cameraOrbitAxis(e.target.value);
+    });
+
+    document.getElementById('direction').addEventListener('change', (e) => {
+      Graph.cameraOrbitDirection(+e.target.value);
+    });
   </script>
 </body>
