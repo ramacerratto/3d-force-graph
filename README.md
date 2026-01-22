@@ -30,6 +30,7 @@ And check out the [React bindings](https://github.com/vasturiano/react-force-gra
 * [Images as nodes](https://vasturiano.github.io/3d-force-graph/example/img-nodes/) ([source](https://github.com/vasturiano/3d-force-graph/blob/master/example/img-nodes/index.html))
 * [HTML in nodes](https://vasturiano.github.io/3d-force-graph/example/html-nodes/) ([source](https://github.com/vasturiano/3d-force-graph/blob/master/example/html-nodes/index.html))
 * [Custom node geometries](https://vasturiano.github.io/3d-force-graph/example/custom-node-geometry/) ([source](https://github.com/vasturiano/3d-force-graph/blob/master/example/custom-node-geometry/index.html))
+* [Node Object Factory](https://vasturiano.github.io/3d-force-graph/example/node-object-factory/) ([source](https://github.com/vasturiano/3d-force-graph/blob/master/example/node-object-factory/index.html))
 * [Gradient Links](https://vasturiano.github.io/3d-force-graph/example/gradient-links/) ([source](https://github.com/vasturiano/3d-force-graph/blob/master/example/gradient-links/index.html))
 * [Text in Links](https://vasturiano.github.io/3d-force-graph/example/text-links/) ([source](https://github.com/vasturiano/3d-force-graph/blob/master/example/text-links/index.html))
 * [Orbit controls](https://vasturiano.github.io/3d-force-graph/example/controls-orbit/) ([source](https://github.com/vasturiano/3d-force-graph/blob/master/example/controls-orbit/index.html))
@@ -328,6 +329,103 @@ Graph.cameraOrbitDirection(-1);
 | <b>getGraphBbox</b>([<i>nodeFilterFn</i>]) | Returns the current bounding box of the nodes in the graph, formatted as `{ x: [<num>, <num>], y: [<num>, <num>], z: [<num>, <num>] }`. If no nodes are found, returns `null`. Accepts an optional argument to define a custom node filter: `node => <boolean>`, which should return a truthy value if the node is to be included. This can be useful to calculate the bounding box of a portion of the graph. |
 | <b>graph2ScreenCoords</b>(<i>x</i>, <i>y</i>, <i>z</i>) | Utility method to translate node coordinates to the viewport domain. Given a set of `x`,`y`,`z` graph coordinates, returns the current equivalent `{x, y}` in viewport coordinates. |
 | <b>screen2GraphCoords</b>(<i>x</i>, <i>y</i>, <i>distance</i>) | Utility method to translate viewport distance coordinates to the graph domain. Given a pair of `x`,`y` screen coordinates and distance from the camera, returns the current equivalent `{x, y, z}` in the domain of graph node coordinates. |
+
+### Node Object Factory
+
+A singleton factory for managing different THREE.js objects as node representations. This provides a type-based approach to custom node geometries with built-in memory optimization through object pooling and caching.
+
+#### Basic Usage
+
+```js
+import ForceGraph3D, { nodeObjectFactory, registerBuiltInTypes } from '3d-force-graph';
+import * as THREE from 'three';
+
+// Register built-in types (cube, cone, cylinder)
+registerBuiltInTypes();
+
+// Create graph using the factory
+const Graph = new ForceGraph3D(document.getElementById('graph'))
+  .nodeThreeObject(nodeObjectFactory.createAccessor(THREE))
+  .graphData({
+    nodes: [
+      { id: 1, nodeThreeObjectType: 'cube', color: '#ff0000' },
+      { id: 2, nodeThreeObjectType: 'cone', color: '#00ff00' },
+      { id: 3, nodeThreeObjectType: 'cylinder', color: '#0000ff' },
+      { id: 4 } // No type = default sphere
+    ],
+    links: [...]
+  });
+```
+
+#### Registering Custom Types
+
+```js
+// Register a custom type
+nodeObjectFactory.registerType('diamond', (node, THREE, factory) => {
+  const size = Math.cbrt(node.val || 1) * 4;
+  const color = node.color || '#ffffaa';
+
+  // Use factory's geometry/material caches for memory optimization
+  const geometry = factory.getGeometry(`diamond_${size}`, () =>
+    new THREE.OctahedronGeometry(size)
+  );
+
+  const material = factory.getMaterial(`lambert_${color}`, () =>
+    new THREE.MeshLambertMaterial({ color, transparent: true, opacity: 0.75 })
+  );
+
+  return new THREE.Mesh(geometry, material);
+});
+
+// Now nodes can use it
+const data = {
+  nodes: [{ id: 1, nodeThreeObjectType: 'diamond', color: '#ff00ff' }],
+  links: []
+};
+```
+
+#### Factory API
+
+| Method | Description |
+| --- | --- |
+| <b>registerType</b>(<i>typeName</i>, <i>creatorFn</i>) | Register a node object creator. The creator receives `(node, THREE, factory)`. |
+| <b>unregisterType</b>(<i>typeName</i>) | Remove a registered type and dispose its pooled objects. |
+| <b>hasType</b>(<i>typeName</i>) | Check if a type is registered. |
+| <b>getRegisteredTypes</b>() | Get array of all registered type names. |
+| <b>createAccessor</b>(<i>THREE</i>, [<i>fallback</i>], [<i>typeAttr</i>]) | Create a `nodeThreeObject` accessor function. |
+| <b>getGeometry</b>(<i>key</i>, <i>createFn</i>) | Get or create a cached geometry (memory optimization). |
+| <b>getMaterial</b>(<i>key</i>, <i>createFn</i>) | Get or create a cached material (memory optimization). |
+| <b>releaseObject</b>(<i>nodeId</i>) | Release an object back to the pool for reuse. |
+| <b>clearPools</b>() | Clear all object pools. |
+| <b>disposeCache</b>() | Dispose all cached geometries and materials. |
+| <b>dispose</b>() | Full cleanup - dispose everything. |
+| <b>getStats</b>() | Get factory statistics (registered types, active objects, cache sizes). |
+
+#### Built-in Types
+
+| Type | Description | Node Properties |
+| --- | --- | --- |
+| `cube` | Box geometry | `val`, `color`, `opacity`, `cubeSize` |
+| `cone` | Cone geometry | `val`, `color`, `opacity`, `coneRadius`, `coneHeight`, `coneSegments` |
+| `cylinder` | Cylinder geometry | `val`, `color`, `opacity`, `cylinderRadiusTop`, `cylinderRadiusBottom`, `cylinderHeight`, `cylinderSegments` |
+
+#### Memory Optimization
+
+The factory provides several mechanisms for memory optimization:
+
+1. **Geometry/Material Caching**: Use `factory.getGeometry()` and `factory.getMaterial()` to share geometries and materials across nodes with the same properties.
+
+2. **Object Pooling**: Objects are pooled by type for reuse when nodes are removed and re-added.
+
+3. **Statistics**: Monitor memory usage with `nodeObjectFactory.getStats()`.
+
+```js
+// Check factory statistics
+const stats = nodeObjectFactory.getStats();
+console.log('Cached geometries:', stats.cachedGeometries);
+console.log('Cached materials:', stats.cachedMaterials);
+console.log('Active objects:', stats.activeObjects);
+```
 
 ### Input JSON syntax
 ```json

@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Node Object Factory Example</title>
+  <style>
+    body { margin: 0; }
+    #info {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(0,0,0,0.7);
+      color: white;
+      padding: 15px;
+      font-family: sans-serif;
+      font-size: 14px;
+      border-radius: 5px;
+      max-width: 350px;
+    }
+    #info h3 { margin-top: 0; }
+    #info code { background: #333; padding: 2px 5px; border-radius: 3px; }
+  </style>
+</head>
+
+<body>
+  <div id="3d-graph"></div>
+  <div id="info">
+    <h3>Node Object Factory Demo</h3>
+    <p>Each node uses a different THREE.js geometry based on its <code>nodeThreeObjectType</code> attribute:</p>
+    <ul>
+      <li><strong>cube</strong> - Box geometry</li>
+      <li><strong>cone</strong> - Cone geometry</li>
+      <li><strong>cylinder</strong> - Cylinder geometry</li>
+      <li><strong>star</strong> - Custom registered type</li>
+      <li><em>(no type)</em> - Default sphere</li>
+    </ul>
+    <p id="stats"></p>
+  </div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://esm.sh/three@0.160.0",
+        "3d-force-graph": "../../dist/3d-force-graph.mjs"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import ForceGraph3D, {
+      nodeObjectFactory,
+      registerBuiltInTypes
+    } from '3d-force-graph';
+
+    // Register all built-in types (cube, cone, cylinder)
+    registerBuiltInTypes();
+
+    // Register a custom type: star shape
+    nodeObjectFactory.registerType('star', (node, THREE, factory) => {
+      const val = node.val || 1;
+      const size = Math.cbrt(val) * 4;
+      const color = node.color || '#ffcc00';
+      const opacity = node.opacity !== undefined ? node.opacity : 0.75;
+
+      // Create a star profile using LatheGeometry
+      const points = [];
+      const numPoints = 5;
+      for (let i = 0; i < numPoints * 2; i++) {
+        const radius = i % 2 === 0 ? size : size / 2;
+        const angle = (i / (numPoints * 2)) * Math.PI;
+        points.push(new THREE.Vector2(
+          Math.sin(angle) * radius,
+          Math.cos(angle) * radius - size / 2
+        ));
+      }
+
+      const geometry = new THREE.LatheGeometry(points, 12);
+
+      // Use factory's material cache for memory optimization
+      const materialKey = `lambert_${color}_${opacity}`;
+      const material = factory.getMaterial(materialKey, () =>
+        new THREE.MeshLambertMaterial({
+          color,
+          transparent: true,
+          opacity
+        })
+      );
+
+      return new THREE.Mesh(geometry, material);
+    });
+
+    // Available types including our custom one
+    const nodeTypes = ['cube', 'cone', 'cylinder', 'star', null]; // null = default sphere
+
+    // Generate some colors
+    const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#ffeaa7'];
+
+    // Create random tree data with different node types
+    const N = 30;
+    const gData = {
+      nodes: [...Array(N).keys()].map(i => ({
+        id: i,
+        nodeThreeObjectType: nodeTypes[i % nodeTypes.length],
+        color: colors[i % colors.length],
+        val: Math.random() * 5 + 1
+      })),
+      links: [...Array(N).keys()]
+        .filter(id => id)
+        .map(id => ({
+          source: id,
+          target: Math.round(Math.random() * (id - 1))
+        }))
+    };
+
+    // Create the graph using the factory's accessor
+    const Graph = new ForceGraph3D(document.getElementById('3d-graph'))
+      .nodeThreeObject(nodeObjectFactory.createAccessor(THREE))
+      .nodeLabel(node => `${node.id}: ${node.nodeThreeObjectType || 'default sphere'}`)
+      .linkWidth(1)
+      .linkOpacity(0.5)
+      .graphData(gData);
+
+    // Display factory statistics
+    function updateStats() {
+      const stats = nodeObjectFactory.getStats();
+      document.getElementById('stats').innerHTML = `
+        <strong>Factory Stats:</strong><br>
+        Registered types: ${stats.registeredTypes}<br>
+        Active objects: ${stats.activeObjects}<br>
+        Cached geometries: ${stats.cachedGeometries}<br>
+        Cached materials: ${stats.cachedMaterials}
+      `;
+    }
+
+    setInterval(updateStats, 1000);
+    updateStats();
+  </script>
+</body>
+</html>

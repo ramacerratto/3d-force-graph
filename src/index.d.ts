@@ -1,6 +1,7 @@
-import { Scene, Light, Camera, WebGLRenderer, WebGLRendererParameters, Renderer } from 'three';
+import { Scene, Light, Camera, WebGLRenderer, WebGLRendererParameters, Renderer, Object3D } from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { ThreeForceGraphGeneric, NodeObject, LinkObject } from 'three-forcegraph';
+import * as THREE from 'three';
 
 export interface ConfigOptions {
   controlType?: 'trackball' | 'orbit' | 'fly'
@@ -134,3 +135,56 @@ interface IForceGraph3D<NodeType extends NodeObject = NodeObject, LinkType exten
 declare const ForceGraph3D: IForceGraph3D;
 
 export default ForceGraph3D;
+
+// Node Object Factory
+
+export type NodeObjectCreator<N extends NodeObject = NodeObject> = (
+  node: N,
+  THREE: typeof import('three'),
+  factory?: INodeObjectFactory
+) => Object3D;
+
+export interface FactoryStats {
+  registeredTypes: number;
+  activeObjects: number;
+  pooledObjects: Record<string, number>;
+  cachedGeometries: number;
+  cachedMaterials: number;
+}
+
+/**
+ * Node Object Factory interface.
+ * Manages THREE.js objects for nodes with object pooling and lifecycle management.
+ */
+export interface INodeObjectFactory {
+  registerType<N extends NodeObject = NodeObject>(typeName: string, creatorFn: NodeObjectCreator<N>): void;
+  unregisterType(typeName: string): boolean;
+  hasType(typeName: string): boolean;
+  getRegisteredTypes(): string[];
+  getGeometry<G extends THREE.BufferGeometry>(key: string, createFn: () => G): G;
+  getMaterial<M extends THREE.Material>(key: string, createFn: () => M): M;
+  createObject<N extends NodeObject = NodeObject>(node: N, THREE: typeof import('three'), typeAttribute?: string): Object3D | null;
+  releaseObject(nodeId: string | number): void;
+  clearPools(): void;
+  clear(): void;
+  disposeCache(): void;
+  dispose(): void;
+  createAccessor<N extends NodeObject = NodeObject>(THREE: typeof import('three'), fallbackAccessor?: ((node: N) => Object3D | null) | Object3D | null, typeAttribute?: string): (node: N) => Object3D | null;
+  getStats(): FactoryStats;
+}
+
+export const nodeObjectFactory: INodeObjectFactory;
+export const NodeObjectFactory: new () => INodeObjectFactory;
+
+export interface NodeObjectTypeModule {
+  typeName: string;
+  create: NodeObjectCreator;
+}
+
+export function registerBuiltInTypes(): void;
+
+export const builtInTypes: {
+  cube: NodeObjectTypeModule;
+  cone: NodeObjectTypeModule;
+  cylinder: NodeObjectTypeModule;
+};
