@@ -246,6 +246,32 @@ class NodeObjectFactory {
   }
 
   /**
+   * Get the active THREE.js object for a node by its ID
+   * @param {string|number} nodeId - The node ID
+   * @returns {THREE.Object3D|null} The active object or null if not found
+   */
+  getActiveObject(nodeId) {
+    const entry = this._activeObjects.get(nodeId);
+    return entry ? entry.object : null;
+  }
+
+  /**
+   * Get all active objects as an array
+   * @returns {Array<{nodeId: string|number, object: THREE.Object3D, typeName: string}>}
+   */
+  getActiveObjects() {
+    const result = [];
+    this._activeObjects.forEach((entry, nodeId) => {
+      result.push({
+        nodeId,
+        object: entry.object,
+        typeName: entry.typeName
+      });
+    });
+    return result;
+  }
+
+  /**
    * Get statistics about the factory state
    * @returns {object}
    */

@@ -4,6 +4,8 @@ const three = window.THREE
   ? window.THREE // Prefer consumption from global THREE, if exists
   : { AmbientLight, DirectionalLight, Vector3, REVISION };
 
+import animationManager from './animation-manager.js';
+
 import { DragControls as ThreeDragControls } from 'three/examples/jsm/controls/DragControls.js';
 
 import ThreeForceGraph from 'three-forcegraph';
@@ -128,6 +130,10 @@ export default Kapsule({
     cameraOrbitTarget: { default: { x: 0, y: 0, z: 0 }, triggerUpdate: false }, // Point to orbit around
     cameraOrbitAxis: { default: 'y', triggerUpdate: false }, // 'x', 'y', or 'z' - axis to orbit around
     cameraOrbitDirection: { default: 1, triggerUpdate: false }, // 1 for clockwise, -1 for counter-clockwise
+
+    // Animation configuration
+    nodeHoverAnimation: { default: null, triggerUpdate: false }, // Animation name to play on hover (e.g., 'pulse', 'glow')
+    nodeHoverAnimationOptions: { default: {}, triggerUpdate: false }, // Options for hover animation
 
     nodeLabel: { default: 'name', triggerUpdate: false },
     linkLabel: { default: 'name', triggerUpdate: false },
@@ -293,8 +299,18 @@ export default Kapsule({
         this.renderer().domElement.style.cursor = null;
       }
 
+      // Calculate delta time for animations
+      const now = performance.now();
+      const deltaTime = state._lastFrameTime ? (now - state._lastFrameTime) / 1000 : 0;
+      state._lastFrameTime = now;
+
       // Update camera orbit
       this._updateCameraOrbit();
+
+      // Update node animations
+      if (state._animationManager) {
+        state._animationManager.tick(deltaTime);
+      }
 
       // Frame cycle
       state.forceGraph.tickFrame();
@@ -306,6 +322,95 @@ export default Kapsule({
     renderer: state => state.renderObjs.renderer(), // Expose renderer
     controls: state => state.renderObjs.controls(), // Expose controls
     tbControls: state => state.renderObjs.tbControls(), // To be deprecated
+
+    // Animation methods
+    animationManager: state => state._animationManager,
+    setAnimationManager: function(state, manager) {
+      state._animationManager = manager;
+      return this;
+    },
+
+    /**
+     * Start an animation on a node
+     * @param {object} node - The node object or node data
+     * @param {string} animationName - Name of the animation to start
+     * @param {object} [options] - Animation options
+     * @returns {number} Animation instance ID
+     */
+    startNodeAnimation: function(state, node, animationName, options = {}) {
+      if (!state._animationManager) {
+        console.warn('ForceGraph3D: No animation manager set. Use setAnimationManager() first.');
+        return -1;
+      }
+
+      // Get the THREE.js object for this node
+      const nodeObj = node.__threeObj || node;
+      if (!nodeObj) {
+        console.warn('ForceGraph3D: Node has no THREE.js object');
+        return -1;
+      }
+
+      return state._animationManager.startAnimation(nodeObj, animationName, options);
+    },
+
+    /**
+     * Stop an animation on a node
+     * @param {object} node - The node object or node data
+     * @param {string} [animationName] - Animation name to stop (omit to stop all)
+     * @param {boolean} [immediate=false] - Stop immediately without transition
+     */
+    stopNodeAnimation: function(state, node, animationName, immediate = false) {
+      if (!state._animationManager) return this;
+
+      const nodeObj = node.__threeObj || node;
+      if (!nodeObj) return this;
+
+      if (animationName) {
+        state._animationManager.stopAnimation(nodeObj, animationName, immediate);
+      } else {
+        state._animationManager.stopAllAnimations(nodeObj, immediate);
+      }
+      return this;
+    },
+
+    /**
+     * Check if a node has an animation running
+     * @param {object} node - The node object or node data
+     * @param {string} [animationName] - Animation name to check (omit to check any)
+     * @returns {boolean}
+     */
+    isNodeAnimating: function(state, node, animationName) {
+      if (!state._animationManager) return false;
+
+      const nodeObj = node.__threeObj || node;
+      if (!nodeObj) return false;
+
+      return state._animationManager.isAnimating(nodeObj, animationName);
+    },
+
+    /**
+     * Toggle an animation on a node - starts if not running, stops if running
+     * @param {object} node - The node object or node data
+     * @param {string} animationName - Name of the animation to toggle
+     * @param {object} [options] - Animation options (used when starting)
+     * @param {boolean} [immediate=false] - Stop immediately without transition
+     * @returns {boolean} True if animation was started, false if stopped
+     */
+    toggleNodeAnimation: function(state, node, animationName, options = {}, immediate = false) {
+      if (!state._animationManager) {
+        console.warn('ForceGraph3D: No animation manager set. Use setAnimationManager() first.');
+        return false;
+      }
+
+      const nodeObj = node.__threeObj || node;
+      if (!nodeObj) {
+        console.warn('ForceGraph3D: Node has no THREE.js object');
+        return false;
+      }
+
+      return state._animationManager.toggleAnimation(nodeObj, animationName, options, immediate);
+    },
+
     _destructor: function() {
       this.pauseAnimation();
       this.graphData({ nodes: [], links: []});
@@ -428,7 +533,9 @@ export default Kapsule({
         .lights([
           new three.AmbientLight(0xcccccc, Math.PI),
           new three.DirectionalLight(0xffffff, 0.6 * Math.PI)
-        ])
+        ]),
+      _animationManager: animationManager, // Use singleton animation manager by default
+      _lastFrameTime: null
     }
   },
 
@@ -618,8 +725,9 @@ export default Kapsule({
         const hoverObj = getGraphObj(obj);
 
         if (hoverObj !== state.hoverObj) {
-          const prevObjType = state.hoverObj ? state.hoverObj.__graphObjType : null;
-          const prevObjData = state.hoverObj ? state.hoverObj.__data : null;
+          const prevHoverObj = state.hoverObj;
+          const prevObjType = prevHoverObj ? prevHoverObj.__graphObjType : null;
+          const prevObjData = prevHoverObj ? prevHoverObj.__data : null;
           const objType = hoverObj ? hoverObj.__graphObjType : null;
           const objData = hoverObj ? hoverObj.__data : null;
           if (prevObjType && prevObjType !== objType) {
@@ -631,6 +739,22 @@ export default Kapsule({
             // Hover in
             const fn = state[`on${objType === 'node' ? 'Node' : 'Link'}Hover`];
             fn && fn(objData, prevObjType === objType ? prevObjData : null);
+          }
+
+          // Handle hover animations for nodes
+          if (state.nodeHoverAnimation && state._animationManager) {
+            // Stop animation on previous node
+            if (prevHoverObj && prevObjType === 'node') {
+              state._animationManager.stopAnimation(prevHoverObj, state.nodeHoverAnimation);
+            }
+            // Start animation on new node
+            if (hoverObj && objType === 'node') {
+              state._animationManager.startAnimation(
+                hoverObj,
+                state.nodeHoverAnimation,
+                state.nodeHoverAnimationOptions
+              );
+            }
           }
 
           // set pointer if hovered object is clickable

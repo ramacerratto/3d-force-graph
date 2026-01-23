@@ -118,6 +118,18 @@ interface ForceGraph3DGenericInstance<ChainableInstance, N extends NodeObject = 
   stopOrbit(): ChainableInstance;
   isOrbiting(): boolean;
 
+  // Node animations
+  nodeHoverAnimation(): string | null;
+  nodeHoverAnimation(animationName: string | null): ChainableInstance;
+  nodeHoverAnimationOptions(): AnimationOptions;
+  nodeHoverAnimationOptions(options: AnimationOptions): ChainableInstance;
+  animationManager(): IAnimationManager;
+  setAnimationManager(manager: IAnimationManager): ChainableInstance;
+  startNodeAnimation(node: N, animationName: string, options?: AnimationOptions): number;
+  stopNodeAnimation(node: N, animationName?: string, immediate?: boolean): ChainableInstance;
+  toggleNodeAnimation(node: N, animationName: string, options?: AnimationOptions, immediate?: boolean): boolean;
+  isNodeAnimating(node: N, animationName?: string): boolean;
+
   // Utility
   graph2ScreenCoords(x: number, y: number, z: number): Coords;
   screen2GraphCoords(screenX: number, screenY: number, distance: number): Coords;
@@ -156,6 +168,12 @@ export interface FactoryStats {
  * Node Object Factory interface.
  * Manages THREE.js objects for nodes with object pooling and lifecycle management.
  */
+export interface ActiveObjectEntry {
+  nodeId: string | number;
+  object: Object3D;
+  typeName: string;
+}
+
 export interface INodeObjectFactory {
   registerType<N extends NodeObject = NodeObject>(typeName: string, creatorFn: NodeObjectCreator<N>): void;
   unregisterType(typeName: string): boolean;
@@ -165,6 +183,8 @@ export interface INodeObjectFactory {
   getMaterial<M extends THREE.Material>(key: string, createFn: () => M): M;
   createObject<N extends NodeObject = NodeObject>(node: N, THREE: typeof import('three'), typeAttribute?: string): Object3D | null;
   releaseObject(nodeId: string | number): void;
+  getActiveObject(nodeId: string | number): Object3D | null;
+  getActiveObjects(): ActiveObjectEntry[];
   clearPools(): void;
   clear(): void;
   disposeCache(): void;
@@ -187,4 +207,104 @@ export const builtInTypes: {
   cube: NodeObjectTypeModule;
   cone: NodeObjectTypeModule;
   cylinder: NodeObjectTypeModule;
+};
+
+// Animation Manager
+
+/**
+ * Animation options
+ */
+export interface AnimationOptions {
+  loop?: boolean;
+  duration?: number;
+  easing?: string | ((t: number) => number);
+  transitionDuration?: number;
+  speed?: number;
+  amplitude?: number;
+  axis?: 'x' | 'y' | 'z' | 'all';
+  direction?: 1 | -1;
+  color?: number | string;
+  minIntensity?: number;
+  maxIntensity?: number;
+  pulse?: boolean;
+  baseScale?: number | null;
+  [key: string]: unknown;
+}
+
+/**
+ * Animation type configuration
+ */
+export interface AnimationConfig {
+  update: (object: Object3D, state: object, deltaTime: number, options: AnimationOptions, transitionProgress: number) => object;
+  defaultOptions?: AnimationOptions;
+  init?: (object: Object3D, options: AnimationOptions) => object;
+  cleanup?: (object: Object3D, state: object, options: AnimationOptions) => void;
+}
+
+/**
+ * Animation manager statistics
+ */
+export interface AnimationStats {
+  animatedObjects: number;
+  totalAnimations: number;
+  registeredTypes: number;
+  byType: Record<string, number>;
+}
+
+/**
+ * Animation Manager interface.
+ * Manages animations for THREE.js objects with support for multiple simultaneous animations.
+ */
+export interface IAnimationManager {
+  registerAnimation(name: string, config: AnimationConfig): void;
+  unregisterAnimation(name: string): boolean;
+  hasAnimation(name: string): boolean;
+  getRegisteredAnimations(): string[];
+  startAnimation(object: Object3D, animationName: string, options?: AnimationOptions): number;
+  stopAnimation(object: Object3D, animationNameOrId?: string | number, immediate?: boolean): void;
+  stopAllAnimations(object: Object3D, immediate?: boolean): void;
+  toggleAnimation(object: Object3D, animationName: string, options?: AnimationOptions, immediate?: boolean): boolean;
+  isAnimating(object: Object3D, animationName?: string): boolean;
+  getAnimationState(object: Object3D, animationName?: string): object | null;
+  tick(deltaTime: number): void;
+  getStats(): AnimationStats;
+  clear(immediate?: boolean): void;
+}
+
+export const animationManager: IAnimationManager;
+export const AnimationManager: new () => IAnimationManager;
+
+// Easing functions
+
+export interface EasingFunctions {
+  linear: (t: number) => number;
+  easeInQuad: (t: number) => number;
+  easeOutQuad: (t: number) => number;
+  easeInOutQuad: (t: number) => number;
+  easeOutCubic: (t: number) => number;
+  easeInCubic: (t: number) => number;
+  easeInOutCubic: (t: number) => number;
+  easeOutElastic: (t: number) => number;
+  easeOutBounce: (t: number) => number;
+}
+
+export const easing: EasingFunctions;
+export function getEasing(easingOrName: string | ((t: number) => number)): (t: number) => number;
+
+// Built-in animations
+
+export interface AnimationTypeModule {
+  name: string;
+  defaultOptions: AnimationOptions;
+  update: (object: Object3D, state: object, deltaTime: number, options: AnimationOptions, transitionProgress: number) => object;
+  init?: (object: Object3D, options: AnimationOptions) => object;
+  cleanup?: (object: Object3D, state: object, options: AnimationOptions) => void;
+}
+
+export function registerBuiltInAnimations(manager?: IAnimationManager): void;
+
+export const builtInAnimations: {
+  pulse: AnimationTypeModule;
+  spin: AnimationTypeModule;
+  glow: AnimationTypeModule;
 };

@@ -31,6 +31,7 @@ And check out the [React bindings](https://github.com/vasturiano/react-force-gra
 * [HTML in nodes](https://vasturiano.github.io/3d-force-graph/example/html-nodes/) ([source](https://github.com/vasturiano/3d-force-graph/blob/master/example/html-nodes/index.html))
 * [Custom node geometries](https://vasturiano.github.io/3d-force-graph/example/custom-node-geometry/) ([source](https://github.com/vasturiano/3d-force-graph/blob/master/example/custom-node-geometry/index.html))
 * [Node Object Factory](https://vasturiano.github.io/3d-force-graph/example/node-object-factory/) ([source](https://github.com/vasturiano/3d-force-graph/blob/master/example/node-object-factory/index.html))
+* [Node Animations](https://vasturiano.github.io/3d-force-graph/example/node-animations/) ([source](https://github.com/vasturiano/3d-force-graph/blob/master/example/node-animations/index.html))
 * [Gradient Links](https://vasturiano.github.io/3d-force-graph/example/gradient-links/) ([source](https://github.com/vasturiano/3d-force-graph/blob/master/example/gradient-links/index.html))
 * [Text in Links](https://vasturiano.github.io/3d-force-graph/example/text-links/) ([source](https://github.com/vasturiano/3d-force-graph/blob/master/example/text-links/index.html))
 * [Orbit controls](https://vasturiano.github.io/3d-force-graph/example/controls-orbit/) ([source](https://github.com/vasturiano/3d-force-graph/blob/master/example/controls-orbit/index.html))
@@ -425,6 +426,150 @@ const stats = nodeObjectFactory.getStats();
 console.log('Cached geometries:', stats.cachedGeometries);
 console.log('Cached materials:', stats.cachedMaterials);
 console.log('Active objects:', stats.activeObjects);
+```
+
+### Node Animations
+
+Built-in animation system for custom node objects. Supports multiple simultaneous animations per node, hover-triggered animations, and manual control via external events.
+
+#### Basic Usage
+
+```js
+import ForceGraph3D, {
+  nodeObjectFactory,
+  animationManager,
+  registerBuiltInTypes,
+  registerBuiltInAnimations
+} from '3d-force-graph';
+import * as THREE from 'three';
+
+// Register built-in types and animations
+registerBuiltInTypes();
+registerBuiltInAnimations();
+
+// Create graph with hover animation
+const Graph = new ForceGraph3D(document.getElementById('graph'))
+  .nodeThreeObject(nodeObjectFactory.createAccessor(THREE))
+  .nodeHoverAnimation('pulse')  // Auto-animate on hover
+  .nodeHoverAnimationOptions({ speed: 2, amplitude: 0.2 })
+  .graphData(myData);
+```
+
+#### Animation Methods
+
+| Method | Description | Default |
+| --- | --- | :--: |
+| <b>nodeHoverAnimation</b>([<i>str</i>]) | Getter/setter for animation name to play on node hover. Set to `null` to disable. | `null` |
+| <b>nodeHoverAnimationOptions</b>([<i>object</i>]) | Getter/setter for options passed to hover animations. | `{}` |
+| <b>animationManager</b>() | Access the internal animation manager instance. | |
+| <b>setAnimationManager</b>(<i>manager</i>) | Replace the animation manager with a custom instance. | |
+| <b>startNodeAnimation</b>(<i>node</i>, <i>animationName</i>, [<i>options</i>]) | Start an animation on a specific node. Returns animation instance ID. | |
+| <b>stopNodeAnimation</b>(<i>node</i>, [<i>animationName</i>], [<i>immediate</i>]) | Stop animation(s) on a node. Omit name to stop all. | |
+| <b>toggleNodeAnimation</b>(<i>node</i>, <i>animationName</i>, [<i>options</i>], [<i>immediate</i>]) | Toggle animation on/off. Returns `true` if started, `false` if stopped. | |
+| <b>isNodeAnimating</b>(<i>node</i>, [<i>animationName</i>]) | Check if a node has animations running. | |
+
+#### Built-in Animations
+
+| Animation | Description | Options |
+| --- | --- | --- |
+| `pulse` | Scale oscillation (breathing effect) | `speed`, `amplitude`, `baseScale`, `axis` |
+| `spin` | Continuous rotation around an axis | `speed`, `axis`, `direction` |
+| `glow` | Emissive intensity oscillation | `speed`, `minIntensity`, `maxIntensity`, `color`, `pulse` |
+
+#### Animation Options
+
+All animations support these common options:
+
+| Option | Description | Default |
+| --- | --- | :--: |
+| `loop` | Whether to loop the animation | `true` |
+| `duration` | Duration in seconds (for non-looping) | `1` |
+| `easing` | Easing function name or custom function | `'linear'` |
+| `transitionDuration` | Fade in/out duration in seconds | `0.2` |
+
+#### Manual Animation Control
+
+```js
+// Toggle animation on click
+Graph.onNodeClick(node => {
+  Graph.toggleNodeAnimation(node, 'spin', { speed: 2 });
+});
+
+// Start animation on right-click
+Graph.onNodeRightClick(node => {
+  Graph.startNodeAnimation(node, 'glow', { color: '#ff0000', maxIntensity: 2 });
+});
+
+// External event trigger
+externalAPI.on('highlight', nodeId => {
+  const obj = nodeObjectFactory.getActiveObject(nodeId);
+  if (obj) {
+    animationManager.startAnimation(obj, 'pulse');
+  }
+});
+```
+
+#### Animation Manager API
+
+For advanced use cases, you can interact directly with the animation manager:
+
+| Method | Description |
+| --- | --- |
+| <b>registerAnimation</b>(<i>name</i>, <i>config</i>) | Register a custom animation type. |
+| <b>unregisterAnimation</b>(<i>name</i>) | Remove an animation type. |
+| <b>hasAnimation</b>(<i>name</i>) | Check if animation type is registered. |
+| <b>getRegisteredAnimations</b>() | Get array of registered animation names. |
+| <b>startAnimation</b>(<i>object</i>, <i>name</i>, [<i>options</i>]) | Start animation on a THREE.js object. |
+| <b>stopAnimation</b>(<i>object</i>, [<i>nameOrId</i>], [<i>immediate</i>]) | Stop animation(s) on an object. |
+| <b>toggleAnimation</b>(<i>object</i>, <i>name</i>, [<i>options</i>], [<i>immediate</i>]) | Toggle animation on/off. |
+| <b>isAnimating</b>(<i>object</i>, [<i>name</i>]) | Check if object has animation running. |
+| <b>getAnimationState</b>(<i>object</i>, [<i>name</i>]) | Get current animation state. |
+| <b>tick</b>(<i>deltaTime</i>) | Update all animations (called automatically). |
+| <b>getStats</b>() | Get statistics (animated objects, total animations, by type). |
+| <b>clear</b>([<i>immediate</i>]) | Stop all animations on all objects. |
+
+#### Custom Animations
+
+```js
+import { animationManager } from '3d-force-graph';
+
+// Register a custom animation
+animationManager.registerAnimation('bounce', {
+  defaultOptions: { height: 5, speed: 3 },
+  init: (object, options) => ({
+    baseY: object.position.y,
+    phase: 0
+  }),
+  update: (object, state, deltaTime, options, transitionProgress) => {
+    state.phase += deltaTime * options.speed * Math.PI * 2;
+    const offset = Math.abs(Math.sin(state.phase)) * options.height * transitionProgress;
+    object.position.y = state.baseY + offset;
+    return state;
+  },
+  cleanup: (object, state, options) => {
+    object.position.y = state.baseY;
+  }
+});
+
+// Use the custom animation
+Graph.startNodeAnimation(node, 'bounce', { height: 10 });
+```
+
+#### Easing Functions
+
+Available easing functions: `linear`, `easeInQuad`, `easeOutQuad`, `easeInOutQuad`, `easeInCubic`, `easeOutCubic`, `easeInOutCubic`, `easeOutElastic`, `easeOutBounce`.
+
+```js
+import { easing, getEasing } from '3d-force-graph';
+
+// Use by name
+Graph.startNodeAnimation(node, 'pulse', { easing: 'easeOutQuad' });
+
+// Use custom easing function
+Graph.startNodeAnimation(node, 'pulse', { easing: t => t * t * t });
+
+// Access easing functions directly
+const easedValue = easing.easeOutElastic(0.5);
 ```
 
 ### Input JSON syntax

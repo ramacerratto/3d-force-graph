@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Node Animations Example</title>
+  <style>
+    body { margin: 0; }
+    #info {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(0,0,0,0.8);
+      color: white;
+      padding: 15px;
+      font-family: sans-serif;
+      font-size: 14px;
+      border-radius: 5px;
+      max-width: 400px;
+      z-index: 100;
+    }
+    #info h3 { margin-top: 0; }
+    #info code { background: #333; padding: 2px 5px; border-radius: 3px; }
+    #controls {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: rgba(0,0,0,0.8);
+      color: white;
+      padding: 15px;
+      font-family: sans-serif;
+      font-size: 14px;
+      border-radius: 5px;
+      z-index: 100;
+    }
+    #controls label {
+      display: block;
+      margin: 8px 0;
+      cursor: pointer;
+    }
+    #controls select, #controls input {
+      margin-left: 10px;
+    }
+    #stats {
+      margin-top: 15px;
+      padding-top: 10px;
+      border-top: 1px solid #444;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="3d-graph"></div>
+
+  <div id="info">
+    <h3>Node Animations Demo</h3>
+    <p>This example demonstrates the animation system for custom node objects:</p>
+    <ul>
+      <li><strong>Hover</strong> over nodes to see the hover animation</li>
+      <li><strong>Click</strong> a node to toggle spin animation</li>
+      <li><strong>Right-click</strong> a node to toggle glow animation</li>
+    </ul>
+    <p>Use the controls on the right to change animation settings.</p>
+    <div id="stats"></div>
+  </div>
+
+  <div id="controls">
+    <h4 style="margin-top: 0;">Animation Controls</h4>
+
+    <label>
+      Hover Animation:
+      <select id="hoverAnimation">
+        <option value="">None</option>
+        <option value="pulse" selected>Pulse</option>
+        <option value="spin">Spin</option>
+        <option value="glow">Glow</option>
+      </select>
+    </label>
+
+    <label>
+      Pulse Speed:
+      <input type="range" id="pulseSpeed" min="0.5" max="5" step="0.5" value="2">
+      <span id="pulseSpeedValue">2</span>
+    </label>
+
+    <label>
+      Pulse Amplitude:
+      <input type="range" id="pulseAmplitude" min="0.05" max="0.5" step="0.05" value="0.2">
+      <span id="pulseAmplitudeValue">0.2</span>
+    </label>
+
+    <label>
+      Spin Speed:
+      <input type="range" id="spinSpeed" min="0.25" max="3" step="0.25" value="1">
+      <span id="spinSpeedValue">1</span>
+    </label>
+
+    <label>
+      Spin Axis:
+      <select id="spinAxis">
+        <option value="x">X</option>
+        <option value="y" selected>Y</option>
+        <option value="z">Z</option>
+      </select>
+    </label>
+
+    <button id="stopAll" style="margin-top: 15px; padding: 8px 15px; cursor: pointer;">
+      Stop All Animations
+    </button>
+  </div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://esm.sh/three@0.160.0",
+        "3d-force-graph": "../../dist/3d-force-graph.mjs"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import ForceGraph3D, {
+      nodeObjectFactory,
+      animationManager,
+      registerBuiltInTypes,
+      registerBuiltInAnimations
+    } from '3d-force-graph';
+
+    // Register built-in types and animations
+    registerBuiltInTypes();
+    registerBuiltInAnimations();
+
+    // Generate random colors
+    const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#ffeaa7', '#dfe6e9', '#fd79a8', '#a29bfe'];
+
+    // Node types for variety
+    const nodeTypes = ['cube', 'cone', 'cylinder', null];
+
+    // Create random tree data
+    const N = 40;
+    const gData = {
+      nodes: [...Array(N).keys()].map(i => ({
+        id: i,
+        nodeThreeObjectType: nodeTypes[i % nodeTypes.length],
+        color: colors[i % colors.length],
+        val: Math.random() * 3 + 1
+      })),
+      links: [...Array(N).keys()]
+        .filter(id => id)
+        .map(id => ({
+          source: id,
+          target: Math.round(Math.random() * (id - 1))
+        }))
+    };
+
+    // Track which nodes have manual animations
+    const spinningNodes = new Set();
+    const glowingNodes = new Set();
+
+    // Create the graph
+    const Graph = new ForceGraph3D(document.getElementById('3d-graph'))
+      .nodeThreeObject(nodeObjectFactory.createAccessor(THREE))
+      .nodeLabel(node => `Node ${node.id} (${node.nodeThreeObjectType || 'sphere'})`)
+      .nodeHoverAnimation('pulse')
+      .nodeHoverAnimationOptions({ speed: 2, amplitude: 0.2 })
+      .linkWidth(1)
+      .linkOpacity(0.4)
+      .onNodeClick((node, event) => {
+        // Toggle spin animation on click
+        const obj = nodeObjectFactory.getActiveObject(node.id);
+        if (!obj) return;
+
+        if (spinningNodes.has(node.id)) {
+          animationManager.stopAnimation(obj, 'spin');
+          spinningNodes.delete(node.id);
+          console.log(`Stopped spin on node ${node.id}`);
+        } else {
+          const spinSpeed = parseFloat(document.getElementById('spinSpeed').value);
+          const spinAxis = document.getElementById('spinAxis').value;
+          animationManager.startAnimation(obj, 'spin', {
+            speed: spinSpeed,
+            axis: spinAxis
+          });
+          spinningNodes.add(node.id);
+          console.log(`Started spin on node ${node.id}`);
+        }
+      })
+      .onNodeRightClick((node, event) => {
+        // Toggle glow animation on right-click
+        const obj = nodeObjectFactory.getActiveObject(node.id);
+        if (!obj) return;
+
+        if (glowingNodes.has(node.id)) {
+          animationManager.stopAnimation(obj, 'glow');
+          glowingNodes.delete(node.id);
+          console.log(`Stopped glow on node ${node.id}`);
+        } else {
+          animationManager.startAnimation(obj, 'glow', {
+            speed: 1.5,
+            maxIntensity: 2,
+            color: node.color
+          });
+          glowingNodes.add(node.id);
+          console.log(`Started glow on node ${node.id}`);
+        }
+      })
+      .graphData(gData);
+
+    // Control handlers
+    document.getElementById('hoverAnimation').addEventListener('change', (e) => {
+      Graph.nodeHoverAnimation(e.target.value || null);
+    });
+
+    document.getElementById('pulseSpeed').addEventListener('input', (e) => {
+      const value = parseFloat(e.target.value);
+      document.getElementById('pulseSpeedValue').textContent = value;
+      Graph.nodeHoverAnimationOptions({ ...Graph.nodeHoverAnimationOptions(), speed: value });
+    });
+
+    document.getElementById('pulseAmplitude').addEventListener('input', (e) => {
+      const value = parseFloat(e.target.value);
+      document.getElementById('pulseAmplitudeValue').textContent = value;
+      Graph.nodeHoverAnimationOptions({ ...Graph.nodeHoverAnimationOptions(), amplitude: value });
+    });
+
+    document.getElementById('spinSpeed').addEventListener('input', (e) => {
+      document.getElementById('spinSpeedValue').textContent = e.target.value;
+    });
+
+    document.getElementById('stopAll').addEventListener('click', () => {
+      animationManager.clear();
+      spinningNodes.clear();
+      glowingNodes.clear();
+      console.log('Stopped all animations');
+    });
+
+    // Display animation statistics
+    function updateStats() {
+      const stats = animationManager.getStats();
+      document.getElementById('stats').innerHTML = `
+        <strong>Animation Stats:</strong><br>
+        Animated objects: ${stats.animatedObjects}<br>
+        Total animations: ${stats.totalAnimations}<br>
+        By type: ${Object.entries(stats.byType).map(([k,v]) => `${k}:${v}`).join(', ') || 'none'}
+      `;
+    }
+
+    setInterval(updateStats, 500);
+    updateStats();
+  </script>
+</body>
+</html>
